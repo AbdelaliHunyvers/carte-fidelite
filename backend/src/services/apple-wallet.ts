@@ -4,7 +4,7 @@ import path from 'path';
 import { prisma } from '../db';
 import { config } from '../config';
 
-export function certsExist(): boolean {
+function certsExist(): boolean {
   return (
     fs.existsSync(config.apple.wwdrCertPath) &&
     fs.existsSync(config.apple.signerCertPath) &&

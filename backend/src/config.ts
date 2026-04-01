@@ -21,7 +21,6 @@ export const config = {
 
   google: {
     credentialsPath: path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS || './certs/google-service-account.json'),
-    credentialsJson: process.env.GOOGLE_CREDENTIALS_JSON || '',
     issuerId: process.env.GOOGLE_WALLET_ISSUER_ID || '',
   },
 };
