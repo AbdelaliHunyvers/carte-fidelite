@@ -133,7 +133,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.get('/restaurants/stats').then(({ data }) => {
-      setStats(data);
+      setStats({
+        totalPrograms: data.totalPrograms ?? 0,
+        totalCards: data.totalCards ?? 0,
+        totalTransactions: data.totalTransactions ?? 0,
+        totalRewards: data.totalRewards ?? 0,
+        newCardsThisWeek: data.newCardsThisWeek ?? 0,
+        newCardsThisMonth: data.newCardsThisMonth ?? 0,
+        transactionsThisWeek: data.transactionsThisWeek ?? 0,
+        transactionsThisMonth: data.transactionsThisMonth ?? 0,
+        programDetails: data.programDetails ?? [],
+        topClients: data.topClients ?? [],
+        recentTransactions: data.recentTransactions ?? [],
+        recentClients: data.recentClients ?? [],
+        rewardsHistory: data.rewardsHistory ?? [],
+      });
       setLoading(false);
     }).catch(() => setLoading(false));
 
