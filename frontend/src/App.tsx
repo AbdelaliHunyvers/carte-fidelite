@@ -15,10 +15,10 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
+  const [, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
 
   useEffect(() => {
-    const check = () => setIsLoggedIn(!!localStorage.getItem('token'));
+    const check = () => { setIsLoggedIn(!!localStorage.getItem('token')); };
     window.addEventListener('storage', check);
     return () => window.removeEventListener('storage', check);
   }, []);
