@@ -1,0 +1,201 @@
+import { google } from 'googleapis';
+import jwt from 'jsonwebtoken';
+import fs from 'fs';
+import { prisma } from '../db';
+import { config } from '../config';
+
+function credentialsExist(): boolean {
+  return fs.existsSync(config.google.credentialsPath);
+}
+
+function getAuth() {
+  return new google.auth.GoogleAuth({
+    keyFile: config.google.credentialsPath,
+    scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
+  });
+}
+
+function buildClassId(programId: string): string {
+  return `${config.google.issuerId}.${programId.replace(/-/g, '_')}`;
+}
+
+function buildObjectId(cardSerialNumber: string): string {
+  return `${config.google.issuerId}.${cardSerialNumber.replace(/-/g, '_')}`;
+}
+
+export async function createLoyaltyClass(programId: string): Promise<void> {
+  if (!credentialsExist() || !config.google.issuerId) return;
+
+  const program = await prisma.loyaltyProgram.findUnique({
+    where: { id: programId },
+    include: { restaurant: true },
+  });
+
+  if (!program) throw new Error('Programme non trouvé');
+
+  const auth = getAuth();
+  const client = await auth.getClient();
+
+  const classId = buildClassId(programId);
+
+  const loyaltyClass = {
+    id: classId,
+    issuerName: program.restaurant.name,
+    programName: program.name,
+    programLogo: {
+      sourceUri: {
+        uri: program.restaurant.logo || `${config.apiBaseUrl}/api/public/default-logo.png`,
+      },
+    },
+    reviewStatus: 'UNDER_REVIEW',
+    hexBackgroundColor: program.color,
+    localizedIssuerName: {
+      defaultValue: { language: 'fr', value: program.restaurant.name },
+    },
+    localizedProgramName: {
+      defaultValue: { language: 'fr', value: program.name },
+    },
+  };
+
+  try {
+    await (client as any).request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/loyaltyClass/${classId}`,
+      method: 'GET',
+    });
+    // Class exists, update it
+    await (client as any).request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/loyaltyClass/${classId}`,
+      method: 'PUT',
+      data: loyaltyClass,
+    });
+  } catch {
+    // Class doesn't exist, create it
+    await (client as any).request({
+      url: 'https://walletobjects.googleapis.com/walletobjects/v1/loyaltyClass',
+      method: 'POST',
+      data: loyaltyClass,
+    });
+  }
+}
+
+export async function generateGooglePassUrl(serialNumber: string): Promise<string> {
+  if (!credentialsExist() || !config.google.issuerId) {
+    throw new Error('Credentials Google non configurés. Consultez le README.');
+  }
+
+  const card = await prisma.loyaltyCard.findUnique({
+    where: { serialNumber },
+    include: {
+      customer: true,
+      program: { include: { restaurant: true } },
+    },
+  });
+
+  if (!card) throw new Error('Carte non trouvée');
+
+  const classId = buildClassId(card.programId);
+  const objectId = buildObjectId(serialNumber);
+
+  const isStamps = card.program.type === 'STAMPS';
+
+  const loyaltyObject: any = {
+    id: objectId,
+    classId,
+    state: 'ACTIVE',
+    accountId: card.customer.email,
+    accountName: card.customer.name || card.customer.email,
+    barcode: {
+      type: 'QR_CODE',
+      value: serialNumber,
+    },
+    loyaltyPoints: {
+      label: isStamps ? 'Tampons' : 'Points',
+      balance: {
+        int: isStamps ? card.currentStamps : card.currentPoints,
+      },
+    },
+    textModulesData: [
+      {
+        header: 'Récompense',
+        body: card.program.reward,
+      },
+      {
+        header: 'Objectif',
+        body: isStamps
+          ? `${card.currentStamps}/${card.program.stampGoal} tampons`
+          : `${card.currentPoints}/${card.program.pointsGoal} points`,
+      },
+    ],
+  };
+
+  // Save google pass object ID
+  await prisma.loyaltyCard.update({
+    where: { id: card.id },
+    data: { googlePassObjectId: objectId },
+  });
+
+  const credentialsJson = JSON.parse(fs.readFileSync(config.google.credentialsPath, 'utf8'));
+
+  const token = jwt.sign(
+    {
+      iss: credentialsJson.client_email,
+      aud: 'google',
+      typ: 'savetowallet',
+      origins: [config.apiBaseUrl],
+      payload: {
+        loyaltyObjects: [loyaltyObject],
+      },
+    },
+    credentialsJson.private_key,
+    { algorithm: 'RS256' }
+  );
+
+  return `https://pay.google.com/gp/v/save/${token}`;
+}
+
+export async function updateGooglePass(serialNumber: string): Promise<void> {
+  if (!credentialsExist() || !config.google.issuerId) return;
+
+  const card = await prisma.loyaltyCard.findUnique({
+    where: { serialNumber },
+    include: { program: true },
+  });
+
+  if (!card || !card.googlePassObjectId) return;
+
+  const auth = getAuth();
+  const client = await auth.getClient();
+
+  const isStamps = card.program.type === 'STAMPS';
+
+  const patchData = {
+    loyaltyPoints: {
+      label: isStamps ? 'Tampons' : 'Points',
+      balance: {
+        int: isStamps ? card.currentStamps : card.currentPoints,
+      },
+    },
+    textModulesData: [
+      {
+        header: 'Récompense',
+        body: card.program.reward,
+      },
+      {
+        header: 'Objectif',
+        body: isStamps
+          ? `${card.currentStamps}/${card.program.stampGoal} tampons`
+          : `${card.currentPoints}/${card.program.pointsGoal} points`,
+      },
+    ],
+  };
+
+  try {
+    await (client as any).request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/loyaltyObject/${card.googlePassObjectId}`,
+      method: 'PATCH',
+      data: patchData,
+    });
+  } catch (error) {
+    console.error('Google Wallet update error:', error);
+  }
+}

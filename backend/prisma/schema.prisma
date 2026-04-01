@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LoyaltyType {
+  STAMPS
+  POINTS
+}
+
+enum TransactionType {
+  STAMP_ADD
+  POINTS_ADD
+  REWARD_CLAIMED
+}
+
+model Restaurant {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  logo      String?
+  address   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programs LoyaltyProgram[]
+}
+
+model LoyaltyProgram {
+  id            String      @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  type          LoyaltyType
+  name          String
+  description   String?
+  stampGoal     Int?        // for STAMPS: how many stamps to reach reward
+  pointsPerEuro Float?      // for POINTS: points earned per euro spent
+  pointsGoal    Int?        // for POINTS: points needed for reward
+  reward        String      // e.g. "1 repas offert", "10% de réduction"
+  color         String      @default("#1a1a2e")
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  cards LoyaltyCard[]
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cards LoyaltyCard[]
+}
+
+model LoyaltyCard {
+  id                 String         @id @default(uuid())
+  serialNumber       String         @unique @default(uuid())
+  customerId         String
+  customer           Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  programId          String
+  program            LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  currentStamps      Int            @default(0)
+  currentPoints      Int            @default(0)
+  totalRewardsEarned Int            @default(0)
+  appleDeviceTokens  String[]       @default([])
+  googlePassObjectId String?
+  lastUpdated        DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  transactions Transaction[]
+
+  @@unique([customerId, programId])
+}
+
+model Transaction {
+  id        String          @id @default(uuid())
+  cardId    String
+  card      LoyaltyCard     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  type      TransactionType
+  amount    Int             @default(1)
+  note      String?
+  createdAt DateTime        @default(now())
+}
+
+model ApplePassRegistration {
+  id           String @id @default(uuid())
+  deviceId     String
+  pushToken    String
+  serialNumber String
+  passTypeId   String
+
+  @@unique([deviceId, serialNumber])
+  @@index([serialNumber])
+}
