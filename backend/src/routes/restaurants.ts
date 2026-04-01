@@ -45,6 +45,51 @@ restaurantRouter.put('/me', authenticate, async (req: AuthRequest, res: Response
   }
 });
 
+restaurantRouter.get('/clients', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const programs = await prisma.loyaltyProgram.findMany({
+      where: { restaurantId: req.restaurantId },
+      select: { id: true },
+    });
+    const programIds = programs.map((p) => p.id);
+
+    const cards = await prisma.loyaltyCard.findMany({
+      where: { programId: { in: programIds } },
+      include: {
+        customer: { select: { id: true, name: true, email: true, phone: true, createdAt: true } },
+        program: { select: { id: true, name: true, type: true, stampGoal: true, pointsGoal: true, reward: true } },
+        transactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const clients = cards.map((card) => ({
+      id: card.customer.id,
+      name: card.customer.name,
+      email: card.customer.email,
+      phone: card.customer.phone,
+      customerSince: card.customer.createdAt,
+      card: {
+        serialNumber: card.serialNumber,
+        programName: card.program.name,
+        programType: card.program.type,
+        currentStamps: card.currentStamps,
+        currentPoints: card.currentPoints,
+        stampGoal: card.program.stampGoal,
+        pointsGoal: card.program.pointsGoal,
+        totalRewardsEarned: card.totalRewardsEarned,
+        lastVisit: card.transactions[0]?.createdAt || card.createdAt,
+        createdAt: card.createdAt,
+      },
+    }));
+
+    res.json(clients);
+  } catch (error) {
+    console.error('Clients error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 restaurantRouter.get('/stats', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const programs = await prisma.loyaltyProgram.findMany({
