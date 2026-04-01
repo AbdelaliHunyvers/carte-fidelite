@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Award, Stamp, Star, Smartphone, CheckCircle, QrCode } from 'lucide-react';
+import { Award, Stamp, Star, Smartphone, CheckCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
