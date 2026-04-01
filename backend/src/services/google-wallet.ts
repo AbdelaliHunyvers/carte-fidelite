@@ -4,11 +4,36 @@ import fs from 'fs';
 import { prisma } from '../db';
 import { config } from '../config';
 
-function credentialsExist(): boolean {
-  return fs.existsSync(config.google.credentialsPath);
+function getCredentialsJson(): Record<string, any> | null {
+  if (config.google.credentialsJson) {
+    try {
+      return JSON.parse(config.google.credentialsJson);
+    } catch {
+      return null;
+    }
+  }
+  if (fs.existsSync(config.google.credentialsPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(config.google.credentialsPath, 'utf8'));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function credentialsExist(): boolean {
+  return getCredentialsJson() !== null && !!config.google.issuerId;
 }
 
 function getAuth() {
+  const creds = getCredentialsJson();
+  if (creds) {
+    return new google.auth.GoogleAuth({
+      credentials: creds,
+      scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
+    });
+  }
   return new google.auth.GoogleAuth({
     keyFile: config.google.credentialsPath,
     scopes: ['https://www.googleapis.com/auth/wallet_object.issuer'],
@@ -134,7 +159,7 @@ export async function generateGooglePassUrl(serialNumber: string): Promise<strin
     data: { googlePassObjectId: objectId },
   });
 
-  const credentialsJson = JSON.parse(fs.readFileSync(config.google.credentialsPath, 'utf8'));
+  const credentialsJson = getCredentialsJson()!;
 
   const token = jwt.sign(
     {

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../db';
 import { config } from '../config';
 import { param } from '../utils/params';
+import { certsExist as appleCertsExist } from '../services/apple-wallet';
+import { credentialsExist as googleCredsExist } from '../services/google-wallet';
 
 export const publicRouter = Router();
 
@@ -66,12 +68,15 @@ publicRouter.post('/register/:programId', async (req: Request, res: Response) =>
       where: { customerId_programId: { customerId: customer.id, programId: program.id } },
     });
 
+    const appleAvailable = appleCertsExist();
+    const googleAvailable = googleCredsExist();
+
     if (existingCard) {
       res.json({
         message: 'Carte existante',
         card: { serialNumber: existingCard.serialNumber },
-        applePassUrl: `${config.apiBaseUrl}/api/passes/apple/${existingCard.serialNumber}`,
-        googlePassUrl: `${config.apiBaseUrl}/api/passes/google/${existingCard.serialNumber}`,
+        applePassUrl: appleAvailable ? `${config.apiBaseUrl}/api/passes/apple/${existingCard.serialNumber}` : null,
+        googlePassUrl: googleAvailable ? `${config.apiBaseUrl}/api/passes/google/${existingCard.serialNumber}` : null,
       });
       return;
     }
@@ -86,8 +91,8 @@ publicRouter.post('/register/:programId', async (req: Request, res: Response) =>
     res.status(201).json({
       message: 'Carte créée',
       card: { serialNumber: card.serialNumber },
-      applePassUrl: `${config.apiBaseUrl}/api/passes/apple/${card.serialNumber}`,
-      googlePassUrl: `${config.apiBaseUrl}/api/passes/google/${card.serialNumber}`,
+      applePassUrl: appleAvailable ? `${config.apiBaseUrl}/api/passes/apple/${card.serialNumber}` : null,
+      googlePassUrl: googleAvailable ? `${config.apiBaseUrl}/api/passes/google/${card.serialNumber}` : null,
     });
   } catch (error) {
     console.error('Register error:', error);

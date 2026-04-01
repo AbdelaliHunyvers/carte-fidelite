@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Award, Stamp, Star, Smartphone, CheckCircle } from 'lucide-react';
+import { Award, Stamp, Star, Smartphone, CheckCircle, QrCode } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -24,6 +24,11 @@ function detectPlatform(): 'ios' | 'android' | 'other' {
   return 'other';
 }
 
+function QrCodeSvg({ value, size = 200 }: { value: string; size?: number }) {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}&margin=8`;
+  return <img src={qrUrl} alt="QR Code carte de fidélité" width={size} height={size} className="rounded-xl" />;
+}
+
 export default function CustomerRegister() {
   const { programId } = useParams<{ programId: string }>();
   const [program, setProgram] = useState<ProgramInfo | null>(null);
@@ -32,8 +37,8 @@ export default function CustomerRegister() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{
-    applePassUrl: string;
-    googlePassUrl: string;
+    applePassUrl: string | null;
+    googlePassUrl: string | null;
     serialNumber: string;
   } | null>(null);
 
@@ -95,17 +100,26 @@ export default function CustomerRegister() {
   }
 
   if (result) {
+    const hasApple = result.applePassUrl && (platform === 'ios' || platform === 'other');
+    const hasGoogle = result.googlePassUrl && (platform === 'android' || platform === 'other');
+    const hasWallet = hasApple || hasGoogle;
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: program.color + '10' }}>
         <div className="w-full max-w-md text-center">
           <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: program.color }} />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Carte créée !</h1>
-          <p className="text-gray-500 mb-8">Ajoutez votre carte de fidélité à votre wallet</p>
+          <p className="text-gray-500 mb-8">
+            {hasWallet
+              ? 'Ajoutez votre carte de fidélité à votre wallet'
+              : 'Voici votre carte de fidélité'}
+          </p>
 
+          {/* Wallet buttons */}
           <div className="space-y-4">
-            {(platform === 'ios' || platform === 'other') && (
+            {hasApple && (
               <a
-                href={result.applePassUrl}
+                href={result.applePassUrl!}
                 className="flex items-center justify-center gap-3 w-full bg-black text-white py-4 rounded-2xl font-medium text-lg hover:bg-gray-800 transition-colors"
               >
                 <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor">
@@ -115,9 +129,9 @@ export default function CustomerRegister() {
               </a>
             )}
 
-            {(platform === 'android' || platform === 'other') && (
+            {hasGoogle && (
               <a
-                href={result.googlePassUrl}
+                href={result.googlePassUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-3 w-full bg-white border-2 border-gray-200 text-gray-900 py-4 rounded-2xl font-medium text-lg hover:bg-gray-50 transition-colors"
@@ -130,6 +144,38 @@ export default function CustomerRegister() {
                 </svg>
                 Ajouter à Google Wallet
               </a>
+            )}
+          </div>
+
+          {/* Web card fallback with QR code */}
+          <div className={hasWallet ? 'mt-6 pt-6 border-t border-gray-200' : ''}>
+            {hasWallet && (
+              <p className="text-sm text-gray-400 mb-4">ou présentez ce QR code en caisse</p>
+            )}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 inline-block">
+              <div
+                className="rounded-xl p-4 text-white mb-4"
+                style={{ backgroundColor: program.color }}
+              >
+                <div className="text-xs opacity-80">{program.restaurant.name}</div>
+                <div className="font-bold mt-0.5">{program.name}</div>
+                <div className="text-sm mt-2 opacity-90">
+                  {program.type === 'STAMPS'
+                    ? `0/${program.stampGoal} tampons`
+                    : `0/${program.pointsGoal} points`}
+                </div>
+              </div>
+              <div className="flex justify-center mb-3">
+                <QrCodeSvg value={result.serialNumber} size={180} />
+              </div>
+              <p className="text-xs text-gray-400">
+                Présentez ce QR code au restaurant
+              </p>
+            </div>
+            {!hasWallet && (
+              <p className="text-sm text-gray-500 mt-4">
+                Ajoutez cette page en raccourci sur votre écran d'accueil pour y accéder rapidement.
+              </p>
             )}
           </div>
         </div>

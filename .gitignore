@@ -6,3 +6,4 @@ certs/
 *.p12
 uploads/
 .DS_Store
+.vercel
