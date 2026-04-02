@@ -38,6 +38,43 @@ publicRouter.get('/programs/:id', async (req: Request, res: Response) => {
   }
 });
 
+publicRouter.get('/check/:programId', async (req: Request, res: Response) => {
+  try {
+    const programId = param(req.params.programId);
+    const email = typeof req.query.email === 'string' ? req.query.email : '';
+    if (!email) {
+      res.json({ exists: false });
+      return;
+    }
+
+    const customer = await prisma.customer.findUnique({ where: { email } });
+    if (!customer) {
+      res.json({ exists: false });
+      return;
+    }
+
+    const card = await prisma.loyaltyCard.findUnique({
+      where: { customerId_programId: { customerId: customer.id, programId } },
+    });
+
+    if (!card) {
+      res.json({ exists: false, customerName: customer.name });
+      return;
+    }
+
+    res.json({
+      exists: true,
+      card: { serialNumber: card.serialNumber },
+      customerName: customer.name,
+      applePassUrl: `${config.apiBaseUrl}/api/passes/apple/${card.serialNumber}`,
+      googlePassUrl: `${config.apiBaseUrl}/api/passes/google/${card.serialNumber}`,
+    });
+  } catch (error) {
+    console.error('Check error:', error);
+    res.json({ exists: false });
+  }
+});
+
 publicRouter.post('/register/:programId', async (req: Request, res: Response) => {
   try {
     const programId = param(req.params.programId);
